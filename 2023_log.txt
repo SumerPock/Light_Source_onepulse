@@ -1,0 +1,56 @@
+3.02 目前此版本针对与武汉高德特殊改版，与其他2.xx版本差距过大
+	1.此版本与2.xx版本不同是专门给武汉高德红外特供的版本
+	2.区别在于伪随机装载时，3.xx版本为2048的长度，2.xx版本为1017的长度，且装载数组数量为2，2.xx版本为4
+	3.修改BUG , LCD界面出精确频率编码出不来的BUG
+	4.修改BUG , LCD界面出伪随机编码后出激光，关闭激光后退出伪随机，进入精确频率界面出激光此时还是伪随机数据
+
+2.10
+	1.增加光芯数据透传功能，光芯返回数据统一 从ID + 60改为 ID + 80
+	2.数据传输方式修改为DMA
+	3.修改BUG 本地模式，每次上电后第一次点击出激光按钮后数据无帧头
+	4.修改BUG 程控模式，每次上电后第一次下发衰减后给上位机报衰减能量为0
+	5.修改BUG 本地模式，伪随机状态下点击出激光发送伪随机数据，然后退出伪随机模式点击出激光还是伪随机模式
+	6.增减协议部分，伪随机数据删除，伪随机数据存储，伪随机存储通道为4
+
+2.11 目前此版本已作废
+	1.2023年9月7日早刘辉提出特殊改版，将能量在下位机固定增加20DB（本地模式，上位机模式都要改），但显示不变
+	2.修改BUG , LCD界面出伪随机编码后出激光，关闭激光后退出伪随机，进入精确频率界面出激光此时还是伪随机数据
+
+2.20
+	1.光芯厂家已修改程序，将原本错误的ID数据修改完毕，现在透传光芯数据时不需要从ID + 60 修改为 ID + 80了，直接数据透传即可
+	
+2.30
+	1.  bsp_key_oc.c 172行	Set_DB(dB_Loss);	/*步进电机需要得到衰减值以控制电机*/
+	2.  bsp.c 523行			Set_DB(show);		/*将数据传入步进电机*/
+	3. main.c 增加以下内容
+				User_Motor_GPIO_Init();
+				GPIO_SetBits(EN5);
+				GPIO_SetBits(EN6);
+				Motor_Power_Off;
+				EXIT_Init(Zero_Position, EXTI_Trigger_Falling);
+				Motor_Return_Zero();
+				/*光芯指令发送 5A A5 02 00*/
+				unsigned char uc_sbuffer[] = {0x5a , 0xa5 , 0x02 ,0x00};
+				memset(Uart_Tx_Buffer3, 0, sizeof(Uart_Tx_Buffer3));
+				memcpy(Uart_Tx_Buffer3, uc_sbuffer, sizeof(uc_sbuffer));
+				DMA_Tx(USART3 , sizeof(uc_sbuffer));
+	//以下为增补的更改内容
+	4 tim.c中增加外部变量extern MOTODATA Motodata;;
+	5. tim.c中增加TIM4初始化与中断函数：void TIM4_Int_Init(unsigned short arr , unsigned int psc)和void TIM4_IRQHandler(void)，main.c中增加tim4初始化调用TIM4_Int_Init(84-1 , 1000-1);
+	6. 修改gpio.c中PC15为输入；
+	7. 在tim.h中增加头文件包含#include "bsp.h"
+	8. bsp.h中修改部分宏定义，修改后如下：
+		#define Motor_STEP		GPIOC,GPIO_Pin_8
+		#define Dir_Up		GPIO_ResetBits(Motor_DIR)
+		#define Dir_Down		GPIO_SetBits(Motor_DIR)
+		#define Motor_Power_On	GPIO_ResetBits(Motor_EN)
+		#define Motor_Power_Off	GPIO_SetBits(Motor_EN)
+	9. TIM4_IRQHandler中将关闭电机的条件修改为：if((Motodata.Motor_End_count) && (MOTO_COUNT >= Motodata.Motor_End_count))
+	    同时在TIM4_IRQHandler中断中增加自增变量MOTO_COUNT++，在tim.c中增加1ms自加变量MOTO_COUNT；
+	10. 在bsp.c中引用外部变量MOTO_COUNT；，同时将Motor_Move_To函数中实际计算Motodata.Motor_End_count值中修改该为：
+	     Motodata.Motor_End_count = MOTO_COUNT + (Motodata.Motor_Current_Positon - position) * 586;
+	     Motodata.Motor_End_count = MOTO_COUNT + (position - Motodata.Motor_Current_Positon) * 586;
+	11. 为配合脉宽调整能量，增加新定义函数void Set_Energy(uint16_t show)，用来设置步进电机版本的衰减设置，函数位于bsp.c中，并在界面刷新（bsp_key_oc.c第172行）和串口接收时候进行调用；
+
+
+	
